@@ -12,6 +12,12 @@ Three ways to use it, one engine: a **desktop app** (Tkinter), a **web app** (ru
 |---|---|---|---|
 | ![](docs/examples/04_shredder_strip.jpg) | ![](docs/examples/05_shredder_confetti.jpg) | ![](docs/examples/06_digital_kill.jpg) | ![](docs/examples/07_disintegration.jpg) |
 
+**Decay stages** — the same photo, 8 steps from untouched to ruined:
+
+| aging | shredder | digital kill |
+|---|---|---|
+| ![](docs/examples/decay_aging.gif) | ![](docs/examples/decay_shredder.gif) | ![](docs/examples/decay_digital.gif) |
+
 *(sample photo: NASA astronaut portrait, public domain, via scikit-image)*
 
 ## Modes
@@ -33,7 +39,7 @@ python app.py            # or: python app.py photo.jpg
 
 `Ctrl+O` open · `Ctrl+S` save · `R` re-roll seed · hold `Space` to see the original · *Batch folder* processes a whole directory with the current settings.
 
-Windows build: run `build_exe.bat` (PyInstaller).
+Windows build: download `PhotoDestroyer-windows.zip` from the [Releases](https://github.com/DmitryLeLeE/photo_destoryer/releases) page (built by GitHub Actions on every `v*` tag), or run `build_exe.bat` (PyInstaller) yourself.
 
 ## Web app
 

@@ -27,6 +27,7 @@ def resource(name):
 
 
 BG, PANEL, FG, DIM, ACC, LINE = "#0d0d0d", "#141414", "#cfcac0", "#6f6a62", "#d6482b", "#2a2a2a"
+PAPER, INK = "#e8e3d4", "#0d0d0d"
 FONT = ("Consolas", 9)
 FONT_B = ("Consolas", 9, "bold")
 PREVIEW_SIDE = 900
@@ -122,21 +123,67 @@ class App:
                       padx=10, pady=6, cursor="hand2", width=width)
         return b
 
+    def _zbtn(self, parent, text, cmd, hot=False):
+        """Flat zine sticker button: ink outline on paper, rust when `hot`."""
+        return tk.Button(parent, text=text, command=cmd, font=("Consolas", 9, "bold"), relief="flat", bd=0,
+                         bg=ACC if hot else PAPER, fg=INK, activebackground="#f06a4a" if hot else "#d6d0bf",
+                         activeforeground=INK, highlightthickness=2, highlightbackground=INK,
+                         highlightcolor=INK, padx=10, pady=5, cursor="hand2")
+
+    def _cutout_title(self, parent):
+        """PHOTO DESTROYER as ransom-note letters: every letter its own scrap of paper."""
+        styles = [
+            (INK, PAPER, ("Impact", 20)),
+            (PAPER, INK, ("Courier New", 18, "bold")),
+            (ACC, INK, ("Impact", 20)),
+            (PAPER, INK, ("Georgia", 18, "bold italic")),
+            (INK, ACC, ("Courier New", 18, "bold")),
+            ("#cfc9b6", INK, ("Arial Black", 17)),
+        ]
+        rnd = random.Random(11)
+        row = tk.Frame(parent, bg=PAPER)
+        for ch in "PHOTO DESTROYER":
+            if ch == " ":
+                tk.Frame(row, bg=PAPER, width=14).pack(side="left")
+                continue
+            bg, fg, font = styles[rnd.randrange(len(styles))]
+            lab = tk.Label(row, text=ch, bg=bg, fg=fg, font=font, padx=3, pady=0,
+                           highlightthickness=2 if bg == PAPER else 0, highlightbackground=INK)
+            lab.pack(side="left", padx=1, pady=(rnd.randint(0, 8), rnd.randint(0, 8)))
+        return row
+
     # ───────────────────────── layout ─────────────────────────
     def _build(self):
-        top = tk.Frame(self.root, bg=BG)
-        top.pack(side="top", fill="x", padx=10, pady=(10, 6))
-        tk.Label(top, text="PHOTO DESTROYER", bg=BG, fg=ACC, font=("Consolas", 13, "bold")).pack(side="left")
-        tk.Label(top, text="  //  turn the past into ruins", bg=BG, fg=DIM, font=FONT).pack(side="left")
-        bar = tk.Frame(top, bg=BG)
-        bar.pack(side="right")
-        self._btn(bar, "Open  Ctrl+O", self.open_dialog).pack(side="left", padx=3)
-        self._btn(bar, "Batch folder", self.batch_dialog).pack(side="left", padx=3)
-        self._btn(bar, "Decay stages", self.stages_dialog).pack(side="left", padx=3)
-        self._btn(bar, "Save PNG  Ctrl+S", self.save_dialog, accent=True).pack(side="left", padx=3)
+        self.root.configure(bg=PAPER)
+        top = tk.Frame(self.root, bg=PAPER)
+        top.pack(side="top", fill="x", padx=14, pady=(12, 8))
+        title = tk.Frame(top, bg=PAPER)
+        title.pack(side="left")
+        self._cutout_title(title).pack(side="top", anchor="w")
+        tags = tk.Frame(title, bg=PAPER)
+        tags.pack(side="top", anchor="w", pady=(4, 0))
+        tk.Label(tags, text=" ISSUE 01 ", bg=INK, fg=PAPER, font=("Consolas", 8, "bold")).pack(side="left", padx=(0, 6))
+        tk.Label(tags, text=" TURN THE PAST INTO RUINS ", bg=ACC, fg=INK, font=("Consolas", 8, "bold")).pack(side="left")
+        bar = tk.Frame(top, bg=PAPER)
+        bar.pack(side="right", anchor="s")
+        self._zbtn(bar, "Open  Ctrl+O", self.open_dialog).pack(side="left", padx=4)
+        self._zbtn(bar, "Batch folder", self.batch_dialog).pack(side="left", padx=4)
+        self._zbtn(bar, "Decay stages", self.stages_dialog).pack(side="left", padx=4)
+        self._zbtn(bar, "Save PNG  Ctrl+S", self.save_dialog, hot=True).pack(side="left", padx=4)
 
-        body = tk.Frame(self.root, bg=BG)
-        body.pack(side="top", fill="both", expand=True, padx=10)
+        # the machine: dark panel with a hard rust shadow, like on the web page
+        outer = tk.Frame(self.root, bg=PAPER)
+        outer.pack(side="top", fill="both", expand=True, padx=(14, 14), pady=(0, 14))
+        tk.Frame(outer, bg=ACC).place(x=9, y=9, relwidth=1, relheight=1)
+        machine = tk.Frame(outer, bg=BG, highlightthickness=3, highlightbackground=INK, highlightcolor=INK)
+        machine.pack(fill="both", expand=True, padx=(0, 9), pady=(0, 9))
+        mbar = tk.Frame(machine, bg=INK)
+        mbar.pack(side="top", fill="x")
+        tk.Label(mbar, text="THE MACHINE", bg=INK, fg=ACC, font=("Consolas", 9, "bold")).pack(side="left", padx=10, pady=5)
+        tk.Label(mbar, text="//  hold SPACE to see the original", bg=INK, fg=DIM, font=FONT).pack(side="left")
+
+        body = tk.Frame(machine, bg=BG)
+        body.pack(side="top", fill="both", expand=True, padx=10, pady=(10, 0))
 
         # preview
         left = tk.Frame(body, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
@@ -226,7 +273,7 @@ class App:
         tk.Frame(inner, bg=PANEL, height=14).pack()
 
         # status bar
-        bot = tk.Frame(self.root, bg=BG)
+        bot = tk.Frame(machine, bg=BG)
         bot.pack(side="bottom", fill="x", padx=10, pady=(6, 8))
         tk.Label(bot, textvariable=self.status, bg=BG, fg=DIM, font=FONT, anchor="w").pack(side="left", fill="x", expand=True)
         self.bar = ttk.Progressbar(bot, length=200, mode="determinate", style="Horizontal.TProgressbar")
