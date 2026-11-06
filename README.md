@@ -37,7 +37,7 @@ Windows build: run `build_exe.bat` (PyInstaller).
 
 ## Web app
 
-Open `docs/index.html` through any static server, or enable **GitHub Pages** (Settings → Pages → Branch `main`, folder `/docs`) and it is live at `https://<user>.github.io/photo_destoryer/`. Drag a photo in, or paste from the clipboard. The engine runs in a Web Worker; nothing leaves your machine.
+Live version: **https://dmitrylelee.github.io/photo_destoryer/** (GitHub Pages; works with either the `/docs` or the root folder setting, the root `index.html` just redirects into `docs/`). Or open `docs/index.html` through any static server. Drag a photo in, or paste from the clipboard. The engine runs in a Web Worker; nothing leaves your machine.
 
 ```bash
 python -m http.server 8000 -d docs     # then open http://localhost:8000
