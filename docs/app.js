@@ -5,7 +5,7 @@
   const view = $('#view'), vg = view.getContext('2d'), status = $('#status');
   const state = { params: {}, seed: 1, master: 100, tint: 'amber', backdrop: 'none', cut: 'strip', src: null, name: 'photo', orig: null, result: null, showOrig: false };
   const PREVIEW = 900;
-  let worker = null, jobId = 0, inflight = null, pending = false, waiters = new Map();
+  let lastPreset = 'Forgotten album', worker = null, jobId = 0, inflight = null, pending = false, waiters = new Map();
 
   // ---------- worker with main-thread fallback ----------
   try { worker = new Worker('worker.js'); worker.onerror = () => { worker = null; }; } catch (e) { worker = null; }
@@ -22,14 +22,16 @@
   }
 
   // ---------- UI build ----------
-  const sl = $('#sliders'), vals = {}, inputs = {};
+  const sl = $('#sliders'), vals = {}, inputs = {}, marks = {}; let presetVals = {};
   function section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; d.dataset.group = t; sl.appendChild(d); return d; }
   function slider(key, label, tip, min, max, val, suffix) {
     const d = document.createElement('div'); d.className = 'sl'; d.title = tip || '';
     d.innerHTML = '<div><span>' + label + '</span><span></span></div><input type="range" min="' + min + '" max="' + max + '" value="' + val + '">';
     const inp = d.querySelector('input'), out = d.querySelectorAll('span')[1]; out.textContent = val + (suffix || '');
-    inp.addEventListener('input', () => { out.textContent = inp.value + (suffix || ''); if (key === 'master') state.master = +inp.value; else state.params[key] = +inp.value; request(); inp.dispatchEvent(new Event('x')); });
-    inputs[key] = inp; vals[key] = out; sl.appendChild(d);
+    const mark = () => d.classList.toggle('on', key === 'master' ? +inp.value !== 100 : +inp.value > 0);
+    inp.addEventListener('input', () => { out.textContent = inp.value + (suffix || ''); if (key === 'master') state.master = +inp.value; else state.params[key] = +inp.value; mark(); request(); });
+    d.addEventListener('dblclick', () => { const v = key === 'master' ? 100 : (presetVals[key] || 0); inp.value = v; inp.dispatchEvent(new Event('input')); });
+    inputs[key] = inp; vals[key] = out; marks[key] = mark; sl.appendChild(d);
   }
   function select(label, opts, key) {
     const w = document.createElement('div'); w.innerHTML = '<div class="lbl" style="margin-top:0">' + label + '</div><select></select>';
@@ -51,11 +53,12 @@
   function setUI() {
     D.keys.forEach((k) => { const v = state.params[k] || 0; inputs[k].value = v; vals[k].textContent = v; });
     inputs.master.value = state.master; vals.master.textContent = state.master + '%';
+    Object.keys(marks).forEach((k) => marks[k]());
     tintSel.select.value = state.tint; bdSel.select.value = state.backdrop; cutSel.select.value = state.cut; $('#seedv').textContent = state.seed;
   }
   function applyPreset(name, doRequest) {
     const p = D.presets[name]; D.keys.forEach((k) => { state.params[k] = p[k] || 0; });
-    state.tint = p.tint; state.backdrop = p.backdrop; state.cut = p.cut || 'strip'; state.master = 100; presetSel.value = name; setUI();
+    state.tint = p.tint; state.backdrop = p.backdrop; state.cut = p.cut || 'strip'; state.master = 100; presetSel.value = name; presetVals = Object.assign({}, state.params); lastPreset = name; setUI();
     document.querySelectorAll('#modes button').forEach((b) => b.classList.toggle('on', b.dataset.preset === name));
     if (doRequest !== false) request();
   }
@@ -74,8 +77,30 @@
     state.seed = 1 + Math.floor(Math.random() * 99999); presetSel.selectedIndex = -1; setUI(); request();
   };
 
+  $('#btnReset').onclick = () => { applyPreset(lastPreset); toast('Back to preset: ' + lastPreset); };
+  let toastT = null;
+  function toast(msg) {
+    let t = $('.toast'); if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  // shareable settings: #s=<base64 json>
+  function encodeState() { return btoa(JSON.stringify({ p: state.params, t: state.tint, b: state.backdrop, c: state.cut, s: state.seed, m: state.master })); }
+  function decodeState(str) {
+    try {
+      const o = JSON.parse(atob(str)); D.keys.forEach((k) => { state.params[k] = Math.max(0, Math.min(100, +(o.p || {})[k] || 0)); });
+      state.tint = o.t; state.backdrop = o.b; state.cut = o.c === 'cross' ? 'cross' : 'strip'; state.seed = o.s | 0 || 1; state.master = Math.max(0, Math.min(200, +o.m || 100));
+      presetSel.selectedIndex = -1; presetVals = Object.assign({}, state.params); setUI(); return true;
+    } catch (e) { return false; }
+  }
+  $('#btnLink').onclick = async () => {
+    const url = location.origin + location.pathname + '#s=' + encodeState();
+    try { await navigator.clipboard.writeText(url); toast('Link copied: opens with these exact settings'); }
+    catch (e) { location.hash = 's=' + encodeState(); toast('Link is in the address bar'); }
+  };
+
+  const stage = $('#stage');
   // ---------- loading ----------
-  function loadFile(f) {
+  function loadFile(f, isSample) {
     if (!f || !f.type.startsWith('image/')) return;
     const url = URL.createObjectURL(f), img = new Image();
     img.onload = () => {
@@ -84,15 +109,14 @@
       const data = g.getImageData(0, 0, w, h);
       state.src = { data: data.data, w, h }; state.name = f.name.replace(/\.[^.]+$/, '') || 'photo'; state.orig = c; URL.revokeObjectURL(url);
       if (worker) worker.postMessage({ type: 'src', data: new Uint8ClampedArray(data.data), w, h });
-      $('#drop').style.display = 'none'; view.hidden = false; $('#btnSave').disabled = false; $('#btnStrip').disabled = false;
-      status.textContent = f.name + '  -  ' + img.naturalWidth + 'x' + img.naturalHeight; request();
+      $('#drop').style.display = 'none'; view.hidden = false; $('#btnSave').disabled = false; $('#btnStrip').disabled = false; $('#btnCmp').disabled = false; stage.classList.remove('empty');
+      status.textContent = (isSample ? 'sample photo (NASA, public domain) - drop your own' : f.name) + '  -  ' + img.naturalWidth + 'x' + img.naturalHeight; request();
     };
     img.onerror = () => { status.textContent = 'Cannot open this file'; };
     img.src = url;
   }
   $('#btnOpen').onclick = () => $('#file').click();
   $('#file').onchange = (e) => loadFile(e.target.files[0]);
-  const stage = $('#stage');
   ['dragenter', 'dragover'].forEach((ev) => stage.addEventListener(ev, (e) => { e.preventDefault(); stage.classList.add('drag'); }));
   ['dragleave', 'drop'].forEach((ev) => stage.addEventListener(ev, (e) => { e.preventDefault(); stage.classList.remove('drag'); }));
   stage.addEventListener('drop', (e) => loadFile(e.dataTransfer.files[0]));
@@ -113,6 +137,17 @@
     $('#badge').style.display = 'none'; const r = state.result; if (!r) return;
     view.width = r.w; view.height = r.h; vg.putImageData(new ImageData(new Uint8ClampedArray(r.data), r.w, r.h), 0, 0);
   }
+  const holdOn = () => { if (state.src && !state.showOrig) { state.showOrig = true; $('#btnCmp').classList.add('hold'); draw(); } };
+  const holdOff = () => { if (state.showOrig) { state.showOrig = false; $('#btnCmp').classList.remove('hold'); draw(); } };
+  ['btnCmp', 'view'].forEach((id) => { const el = $('#' + id); el.addEventListener('pointerdown', (e) => { if (e.button === 0 || e.pointerType === 'touch') { holdOn(); } }); });
+  ['pointerup', 'pointercancel', 'blur'].forEach((ev) => window.addEventListener(ev, holdOff));
+  $('#view').addEventListener('contextmenu', (e) => e.preventDefault());
+  window.addEventListener('keydown', (e) => {
+    if (/select|input|textarea/i.test(e.target.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'r' || e.key === 'R') $('#btnRand').click();
+    else if (e.key === 's' || e.key === 'S') $('#btnSeed').click();
+    else if (e.key >= '1' && e.key <= '3') document.querySelectorAll('#modes button')[+e.key - 1].click();
+  });
   window.addEventListener('keydown', (e) => { if (e.code === 'Space' && !state.showOrig && state.src && !/select|input/i.test(e.target.tagName)) { e.preventDefault(); state.showOrig = true; draw(); } });
   window.addEventListener('keyup', (e) => { if (e.code === 'Space' && state.showOrig) { state.showOrig = false; draw(); } });
 
@@ -143,5 +178,11 @@
     $('#btnStrip').disabled = false; request();
   };
 
-  applyPreset('Forgotten album', false);
+  stage.classList.add('empty');
+  stage.addEventListener('click', () => { if (stage.classList.contains('empty')) $('#file').click(); });
+  const initial = location.hash.startsWith('#s=') ? decodeState(location.hash.slice(3)) : false;
+  if (!initial) applyPreset('Forgotten album', false);
+  // start alive: load the sample photo so the page is never an empty box
+  fetch('examples/00_original.jpg').then((r) => { if (!r.ok) throw 0; return r.blob(); })
+    .then((b) => loadFile(new File([b], 'sample.jpg', { type: 'image/jpeg' }), true)).catch(() => {});
 })();

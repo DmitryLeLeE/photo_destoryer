@@ -30,7 +30,7 @@ K = {n: i for i, n in enumerate(
     ["border", "water", "fade", "mirror", "stain", "crack", "peel", "crease",
      "dust", "grain", "burn", "tear", "corner", "tape", "glitch", "chroma",
      "scan", "ghost", "bloom", "rot", "label", "bg", "tilt",
-     "sort", "melt", "corrupt", "redact", "dissolve", "shred"])}
+     "sort", "melt", "corrupt", "redact", "dissolve", "shred", "relief", "fademap"])}
 
 TINT_GAIN = {
     "amber": (1.00, 0.88, 0.58),
@@ -298,15 +298,46 @@ def fx_water_marks(img, a, E, paper):
     return img
 
 
-def fx_fade(img, a, tint):
+def fx_fade(img, a, tint, E):
+    """Dye fade that is NOT uniform: frame edges and blotchy patches lose more colour,
+    the way real prints fade where air, light and acid reach them first."""
+    h, w = img.shape[:2]
+    rng = E.rng("fademap")
+    X, Y = E.xy
+    edge = np.maximum(np.abs(X / w * 2 - 1), np.abs(Y / h * 2 - 1)) ** 3
+    field = fbm(rng, h, w, E.u * 300, 3) - 0.5
+    am = clamp01(a * (0.78 + 0.9 * field + 0.38 * edge))[..., None]
     lum = (img @ LUMA)[..., None]
-    img = lum + (img - lum) * (1 - 0.78 * a)
-    g = 1 + (np.array(TINT_GAIN[tint], F32) - 1) * a
+    img = lum + (img - lum) * (1 - 0.78 * am)
+    g = 1 + (np.array(TINT_GAIN[tint], F32) - 1) * am
     img = img * g
-    lift = np.array(TINT_BLACK[tint], F32) * (0.12 * a)
-    img = lift + img * (1 - 0.22 * a)
-    img = 0.5 + (img - 0.5) * (1 - 0.32 * a)
+    lift = np.array(TINT_BLACK[tint], F32) * (0.12 * am)
+    img = lift + img * (1 - 0.22 * am)
+    img = 0.5 + (img - 0.5) * (1 - 0.32 * am)
     return clamp01(img)
+
+
+def fx_relief(img, a, fade, E):
+    """Make the print feel like a physical object: it is never perfectly flat or sharp.
+    Lamp falloff + slight curl, paper-fibre relief lit from one side, lost fine detail."""
+    rng = E.rng("relief")
+    h, w, u = E.h, E.w, E.u
+    X, Y = E.xy
+    ang = rng.uniform(0, 2 * math.pi)
+    slope = ((X / w - 0.5) * math.cos(ang) + (Y / h - 0.5) * math.sin(ang)).astype(F32)
+    low = fbm(rng, h, w, u * 380, 2) - 0.5
+    light = 1 + a * (0.12 * slope + 0.20 * low)
+    fine = noise2d(rng, h, w, u * 2.2)
+    coarse = noise2d(rng, h, w, u * 13)
+    hgt = 0.65 * fine + 0.35 * coarse
+    d = np.zeros_like(hgt)
+    d[1:, 1:] = hgt[1:, 1:] - hgt[:-1, :-1]
+    d = d / (float(d.std()) + 1e-6)
+    light = light + d * (0.010 + 0.022 * a)
+    if fade > 0:
+        soft = np.stack([gauss(img[..., c], 0.8 * u + 0.8 * u * fade) for c in range(3)], -1)
+        img = img + (soft - img) * (0.55 * fade)
+    return clamp01(img * light[..., None])
 
 
 def fx_mirror(img, a, E):
@@ -1153,7 +1184,7 @@ def render(src, params, seed=1, master=100, max_side=1100, progress=None):
         img = fx_water_warp(img, p["water"], E)
     if p["fade"] > 0 or tint != "none":
         step("fade")
-        img = fx_fade(img, p["fade"], tint)
+        img = fx_fade(img, p["fade"], tint, E)
     if p["mirror"] > 0:
         step("mirror")
         img = fx_mirror(img, p["mirror"], E)
@@ -1171,6 +1202,10 @@ def render(src, params, seed=1, master=100, max_side=1100, progress=None):
     if p["crease"] > 0:
         step("crease")
         img = fx_crease(img, p["crease"], E, paper)
+    age = max(p["fade"], p["mirror"], p["stain"], p["crack"], p["peel"], p["crease"], p["water"])
+    if age > 0:
+        step("relief")
+        img = fx_relief(img, age, p["fade"], E)
     if p["dust"] > 0:
         step("dust")
         img = fx_dust(img, p["dust"], E)

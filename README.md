@@ -28,6 +28,8 @@ Three ways to use it, one engine: a **desktop app** (Tkinter), a **web app** (ru
 
 **DIGITAL KILL** — the file itself rots: pixel sorting, melting/dripping pixels, flipped bytes + deep-fry, disintegration into drifting particles, redaction bars and a secure-erase pass. Combine with the **WIRED** group (glitch, channel split, VHS scan, ghost layer, overexposure, digital rot, system labels) for the lain-style "signal is dying" look.
 
+The look is built to read as a physical object: dye fade that hits the edges and blotches first, lamp falloff and curl, lit paper-fibre relief, lost fine detail, then creases, craquelure, peeling emulsion and torn fibre edges on top.
+
 Every effect is a 0–100 slider, the **Total decay** slider scales all of them (0–200 %), and every layout is deterministic per **seed** — moving one slider never re-rolls the damage of the others. **Decay stages** exports the same photo at N stages of destruction (PNG frames + GIF + contact strip), the "art of erasing the past" series.
 
 ## Desktop app

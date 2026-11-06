@@ -8,7 +8,7 @@
   const TINT_BLACK = { amber: [0.9, 0.6, 0.25], red: [1.0, 0.4, 0.3], cyan: [0.2, 0.6, 0.7], mono: [0.5, 0.55, 0.65], none: [0.5, 0.5, 0.5] };
   const PAPER = [0.93, 0.89, 0.79];
   const NAMES = ['border', 'water', 'fade', 'mirror', 'stain', 'crack', 'peel', 'crease', 'dust', 'grain', 'burn', 'tear', 'corner',
-    'tape', 'glitch', 'chroma', 'scan', 'ghost', 'bloom', 'rot', 'label', 'bg', 'tilt', 'sort', 'melt', 'corrupt', 'redact', 'dissolve', 'shred'];
+    'tape', 'glitch', 'chroma', 'scan', 'ghost', 'bloom', 'rot', 'label', 'bg', 'tilt', 'sort', 'melt', 'corrupt', 'redact', 'dissolve', 'shred', 'relief', 'fademap'];
   const K = {}; NAMES.forEach((n, i) => { K[n] = i; });
   const PI = Math.PI;
 
@@ -265,14 +265,51 @@
     return img;
   }
 
-  function fxFade(img, n, a, tint) {
-    const g = TINT_GAIN[tint].map((x) => 1 + (x - 1) * a), lift = TINT_BLACK[tint].map((x) => x * 0.12 * a);
-    for (let i = 0; i < n; i++) {
-      const l = lumaAt(img, i * 3);
+  function fxFade(img, E, a, tint) {
+    // dye fade is NOT uniform: frame edges and blotchy patches lose more colour
+    const { h, w, u } = E, n = h * w, rng = E.rng('fademap'), field = fbm(rng, h, w, u * 300, 3);
+    const G = TINT_GAIN[tint], B = TINT_BLACK[tint];
+    for (let y = 0; y < h; y++) {
+      const ey = Math.abs(y / h * 2 - 1);
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x, ex = Math.abs(x / w * 2 - 1), e = Math.max(ex, ey), edge = e * e * e;
+        const am = clamp01(a * (0.78 + 0.9 * (field[i] - 0.5) + 0.38 * edge));
+        const l = lumaAt(img, i * 3);
+        for (let c = 0; c < 3; c++) {
+          let v = l + (img[i * 3 + c] - l) * (1 - 0.78 * am);
+          v *= 1 + (G[c] - 1) * am;
+          v = B[c] * 0.12 * am + v * (1 - 0.22 * am);
+          v = 0.5 + (v - 0.5) * (1 - 0.32 * am);
+          img[i * 3 + c] = clamp01(v);
+        }
+      }
+    }
+    return img;
+  }
+
+  function fxRelief(img, a, fade, E) {
+    // physical-object feel: lamp falloff + curl, paper-fibre relief lit from one side, lost fine detail
+    const { h, w, u } = E, n = h * w, rng = E.rng('relief');
+    const ang = rng.uniform(0, 2 * PI), ca = Math.cos(ang), sa = Math.sin(ang);
+    const low = fbm(rng, h, w, u * 380, 2), fine = noise2d(rng, h, w, u * 2.2), coarse = noise2d(rng, h, w, u * 13);
+    const hgt = new Float32Array(n); for (let i = 0; i < n; i++) hgt[i] = 0.65 * fine[i] + 0.35 * coarse[i];
+    const d = new Float32Array(n); let m = 0;
+    for (let y = 1; y < h; y++) for (let x = 1; x < w; x++) { const i = y * w + x, v = hgt[i] - hgt[i - w - 1]; d[i] = v; m += v; }
+    m /= n; let vr = 0; for (let i = 0; i < n; i++) { const t = d[i] - m; vr += t * t; }
+    const sd = Math.sqrt(vr / n) + 1e-6;
+    if (fade > 0) {
+      const sig = 0.8 * u + 0.8 * u * fade, k = 0.55 * fade;
       for (let c = 0; c < 3; c++) {
-        let v = l + (img[i * 3 + c] - l) * (1 - 0.78 * a);
-        v = v * g[c]; v = lift[c] + v * (1 - 0.22 * a); v = 0.5 + (v - 0.5) * (1 - 0.32 * a);
-        img[i * 3 + c] = clamp01(v);
+        const ch = new Float32Array(n); for (let i = 0; i < n; i++) ch[i] = img[i * 3 + c];
+        const sm = gauss(ch, w, h, 1, sig);
+        for (let i = 0; i < n; i++) img[i * 3 + c] += (sm[i] - ch[i]) * k;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x, slope = (x / w - 0.5) * ca + (y / h - 0.5) * sa;
+        const light = 1 + a * (0.12 * slope + 0.20 * (low[i] - 0.5)) + (d[i] / sd) * (0.010 + 0.022 * a);
+        for (let c = 0; c < 3; c++) img[i * 3 + c] = clamp01(img[i * 3 + c] * light);
       }
     }
     return img;
@@ -856,13 +893,15 @@
     const dig = [['sort', fxSort], ['melt', fxMelt], ['corrupt', fxCorrupt], ['glitch', fxGlitch], ['chroma', fxChroma], ['scan', fxScan], ['rot', fxRot], ['redact', fxRedact], ['ghost', fxGhost], ['bloom', fxBloom]];
     for (const [name, fn] of dig) if (p[name] > 0) img = fn(img, p[name], E);
     if (p.water > 0) img = fxWaterWarp(img, p.water, E);
-    if (p.fade > 0 || tint !== 'none') img = fxFade(img, n, p.fade, tint);
+    if (p.fade > 0 || tint !== 'none') img = fxFade(img, E, p.fade, tint);
     if (p.mirror > 0) img = fxMirror(img, p.mirror, E);
     if (p.stain > 0) img = fxStain(img, p.stain, E, paper);
     if (p.water > 0) img = fxWaterMarks(img, p.water, E, paper);
     if (p.crack > 0) img = fxCrack(img, p.crack, E, paper);
     if (p.peel > 0) img = fxPeel(img, p.peel, E, paper);
     if (p.crease > 0) img = fxCrease(img, p.crease, E, paper);
+    const age = Math.max(p.fade, p.mirror, p.stain, p.crack, p.peel, p.crease, p.water);
+    if (age > 0) img = fxRelief(img, age, p.fade, E);
     if (p.dust > 0) img = fxDust(img, p.dust, E);
     if (p.grain > 0) img = fxGrain(img, p.grain, E);
     for (let i = 0; i < img.length; i++) img[i] = clamp01(img[i]);

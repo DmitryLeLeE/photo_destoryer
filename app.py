@@ -191,6 +191,9 @@ class App:
         self.canvas = tk.Canvas(left, bg="#101010", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Configure>", lambda e: self.redraw())
+        # press and hold the picture = see the original (same as SPACE)
+        self.canvas.bind("<ButtonPress-1>", self._canvas_press)
+        self.canvas.bind("<ButtonRelease-1>", self._orig_off)
 
         # controls
         right = tk.Frame(body, bg=PANEL, width=330, highlightthickness=1, highlightbackground=LINE)
@@ -212,7 +215,7 @@ class App:
 
         row = tk.Frame(head, bg=PANEL)
         row.pack(fill="x")
-        self._btn(row, "Randomize", self.randomize).pack(side="left", fill="x", expand=True, padx=(0, 3))
+        self._btn(row, "Randomize  G", self.randomize).pack(side="left", fill="x", expand=True, padx=(0, 3))
         self._btn(row, "Re-roll seed  R", self.reroll).pack(side="left", fill="x", expand=True, padx=(3, 0))
 
         sr = tk.Frame(head, bg=PANEL)
@@ -292,7 +295,8 @@ class App:
     def _slider(self, parent, label, var, lo, hi, tip=None, suffix=""):
         f = tk.Frame(parent, bg=PANEL)
         f.pack(fill="x", padx=12, pady=1)
-        tk.Label(f, text=label, bg=PANEL, fg=FG, font=FONT, anchor="w").pack(side="left")
+        lab = tk.Label(f, text=label, bg=PANEL, fg=FG, font=FONT, anchor="w")
+        lab.pack(side="left")
         val = tk.Label(f, text=str(var.get()) + suffix, bg=PANEL, fg=DIM, font=FONT, width=5, anchor="e")
         val.pack(side="right")
         s = tk.Scale(parent, from_=lo, to=hi, orient="horizontal", variable=var, showvalue=False,
@@ -301,9 +305,22 @@ class App:
         s.pack(fill="x", padx=12)
         var.trace_add("write", lambda *a: val.config(text=str(var.get()) + suffix))
         var.trace_add("write", lambda *a: self.request())
+        # sliders at zero look dim, so the active damage is visible at a glance
+        var.trace_add("write", lambda *a: lab.config(fg=FG if var.get() else DIM))
+        lab.config(fg=FG if var.get() else DIM)
+        s.bind("<Double-Button-1>", lambda e, v=var: self._reset_var(v))
         if tip:
             for w in (f, s):
                 w.bind("<Enter>", lambda e, t=tip: self.status.set(t))
+
+    def _reset_var(self, var):
+        """Double-click a slider: back to the value the current preset gave it."""
+        for k, v in self.vars.items():
+            if v is var:
+                var.set(int(getattr(self, "preset_vals", {}).get(k, 0)))
+                return
+        if var is self.master:
+            var.set(100)
 
     def _wheel(self, on):
         if on:
@@ -321,6 +338,11 @@ class App:
         r.bind("<KeyPress-space>", self._orig_on)
         r.bind("<KeyRelease-space>", self._orig_off)
         r.bind("<KeyPress-r>", lambda e: self.reroll() if not isinstance(e.widget, ttk.Combobox) else None)
+        r.bind("<KeyPress-g>", lambda e: self.randomize() if not isinstance(e.widget, ttk.Combobox) else None)
+        for i, (preset, group) in enumerate((("Forgotten album", "TIME"), ("Shredder: strip cut", "SHREDDER"),
+                                              ("Digital kill", "DIGITAL KILL")), 1):
+            r.bind("<KeyPress-%d>" % i, lambda e, p=preset, g=group:
+                   self.set_mode(p, g) if not isinstance(e.widget, ttk.Combobox) else None)
 
     # ───────────────────────── state helpers ─────────────────────────
     def _combo_set(self, var, table, cb):
@@ -351,6 +373,7 @@ class App:
         self.master.set(100)
         for k in ("shred_w", "shred_chaos"):
             self.vars[k].set(int(p.get(k, 0)))
+        self.preset_vals = {k: int(p.get(k, 0)) for k in self.vars}
         self._loading = False
         self._sync_combos()
         if request:
@@ -478,6 +501,12 @@ class App:
         c.create_image(w // 2, h // 2, image=self.photo)
         if self.show_original:
             c.create_text(14, 12, anchor="nw", text="ORIGINAL", fill=ACC, font=FONT_B)
+
+    def _canvas_press(self, e):
+        if self.preview_src is None:
+            self.open_dialog()          # empty stage: click to open a photo
+        else:
+            self._orig_on(e)
 
     def _orig_on(self, e):
         if not isinstance(e.widget, (ttk.Combobox,)) and not self.show_original and self.preview_src is not None:

@@ -14,21 +14,13 @@
 <div class="wrap">
   <section class="hero">
     <h1 class="title" id="title" aria-label="PHOTO DESTROYER"></h1>
-    <span class="sub">ISSUE 01</span><span class="sub r">TURN THE PAST INTO RUINS</span>
-    <div class="manifesto">
-      <div>
-        <p>A photograph is a promise that the past will hold still. <b>This machine breaks that promise.</b></p>
-        <p>Drop in any picture and watch it age badly: dyes dying at different speeds, emulsion cracking and peeling, corners torn off, water, mould, fire. Or feed it to the shredder. Or let it rot from the inside, byte by byte, until it dissolves into drifting dust.</p>
-        <p>Every ruin is deterministic: same photo, same seed, same destruction. Save the whole decay as a series and exhibit the erasing itself.</p>
-        <div class="modes-cta">
-          <a class="sticker" href="#app" data-go="Forgotten album">AGING</a>
-          <a class="sticker" href="#app" data-go="Shredder: strip cut">SHREDDER</a>
-          <a class="sticker" href="#app" data-go="Digital kill">DIGITAL KILL</a>
-        </div>
-      </div>
-      <div class="cutout">
-        <h3>HOW TO RUIN A PHOTO</h3>
-        <ol><li>Drop a picture into the machine.</li><li>Pick a mode, drag the sliders.</li><li>Hold <b>SPACE</b> to see what you destroyed.</li><li>Save a PNG, or a whole <b>decay strip</b>.</li></ol>
+    <div class="herorow">
+      <span class="sub">ISSUE 01</span><span class="sub r">TURN THE PAST INTO RUINS</span>
+      <span class="spacer"></span>
+      <div class="modes-cta">
+        <a class="sticker" href="#app" data-go="Forgotten album">AGING</a>
+        <a class="sticker" href="#app" data-go="Shredder: strip cut">SHREDDER</a>
+        <a class="sticker" href="#app" data-go="Digital kill">DIGITAL KILL</a>
       </div>
     </div>
   </section>
@@ -36,13 +28,13 @@
 
 <section class="machine" id="app">
   <div class="mbar"><h2>THE MACHINE</h2><span class="tag">// runs in your browser</span><span class="spacer"></span>
-    <button id="btnOpen">Open photo</button><button id="btnStrip" disabled>Decay strip</button><button id="btnSave" class="acc" disabled>Save PNG</button>
+    <button id="btnOpen">Open photo</button><button id="btnCmp" disabled title="Press and hold to see the original">Hold: original</button><button id="btnLink" title="Copy a link with these exact settings">Copy link</button><button id="btnStrip" disabled>Decay strip</button><button id="btnSave" class="acc" disabled>Save PNG</button>
     <input id="file" type="file" accept="image/*" hidden></div>
   <main>
     <div id="stage">
       <canvas id="view" width="2" height="2" hidden></canvas>
       <div id="drop"><b>DROP A PHOTO HERE</b><span>or click "Open photo" / paste from the clipboard</span><span>nothing is uploaded, everything happens on your machine</span></div>
-      <div id="badge">ORIGINAL</div><div id="busy">rendering...</div>
+      <div id="hint">drop your own photo here, or paste it</div><div id="badge">ORIGINAL</div><div id="busy">rendering...</div>
     </div>
     <aside>
       <div class="top">
@@ -53,8 +45,8 @@
           <button data-mode="digital" data-preset="Digital kill" data-group="DIGITAL KILL">DIGITAL KILL</button>
         </div>
         <div class="lbl">PRESET</div><select id="preset"></select>
-        <div class="row"><button id="btnRand">Randomize</button><button id="btnSeed">Re-roll seed</button></div>
-        <div class="lbl">SEED <b id="seedv" style="color:var(--fg)">1</b> &nbsp; HOLD <b style="color:var(--fg)">SPACE</b> = ORIGINAL</div>
+        <div class="row"><button id="btnRand" title="R">Randomize</button><button id="btnSeed" title="S">New seed</button><button id="btnReset" title="Back to the preset">Reset</button></div>
+        <div class="lbl">SEED <b id="seedv" style="color:var(--fg)">1</b> &nbsp; <b style="color:var(--fg)">SPACE</b> ORIGINAL &nbsp; <b style="color:var(--fg)">R</b> RANDOM &nbsp; <b style="color:var(--fg)">S</b> SEED &nbsp; <b style="color:var(--fg)">1-3</b> MODE</div>
       </div>
       <div id="sliders"></div>
     </aside>
@@ -64,6 +56,20 @@
 </section>
 
 <div class="wrap">
+  <section class="block">
+    <div class="manifesto">
+      <div>
+        <p>A photograph is a promise that the past will hold still. <b>This machine breaks that promise.</b></p>
+        <p>Drop in any picture and watch it age badly: dyes dying at different speeds, emulsion cracking and peeling, corners torn off, water, mould, fire. Or feed it to the shredder. Or let it rot from the inside, byte by byte, until it dissolves into drifting dust.</p>
+        <p>Every ruin is deterministic: same photo, same seed, same destruction. Save the whole decay as a series and exhibit the erasing itself.</p>
+      </div>
+      <div class="cutout">
+        <h3>HOW TO RUIN A PHOTO</h3>
+        <ol><li>Drop your own picture on the machine (or paste one).</li><li>Pick a mode, drag the sliders. Double-click a slider to reset it.</li><li>Press and hold the picture, or hold <b>SPACE</b>, to see the original.</li><li>Copy a link to share the exact settings, or save a PNG / <b>decay strip</b>.</li></ol>
+      </div>
+    </div>
+  </section>
+
   <section class="block">
     <div class="h"><h2>SPECIMENS</h2><span>same photo, different ends. hover for colour.</span></div>
     <div class="specimens">
