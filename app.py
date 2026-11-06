@@ -18,6 +18,14 @@ from destroyer import render, load_image, PARAMS, PRESETS, TINTS, BACKDROPS, CUT
 from destroyer.stages import export_stages
 
 APP = "PHOTO DESTROYER"
+
+
+def resource(name):
+    """Path to a bundled file (works from source and from a PyInstaller build)."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, name)
+
+
 BG, PANEL, FG, DIM, ACC, LINE = "#0d0d0d", "#141414", "#cfcac0", "#6f6a62", "#d6482b", "#2a2a2a"
 FONT = ("Consolas", 9)
 FONT_B = ("Consolas", 9, "bold")
@@ -44,6 +52,14 @@ class App:
         self.root = root
         root.title(APP)
         root.configure(bg=BG)
+        try:
+            if sys.platform.startswith("win"):
+                root.iconbitmap(resource("icon.ico"))
+            else:
+                self._icon = ImageTk.PhotoImage(Image.open(resource("icon.png")))
+                root.iconphoto(True, self._icon)
+        except Exception:
+            pass  # a missing icon must never stop the app
         root.geometry("1280x820")
         root.minsize(980, 640)
 

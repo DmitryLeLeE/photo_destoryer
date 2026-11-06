@@ -6,11 +6,11 @@ Three ways to use it, one engine: a **desktop app** (Tkinter), a **web app** (ru
 
 | original | forgotten album | flooded archive | scorched |
 |---|---|---|---|
-| ![](examples/00_original.jpg) | ![](examples/01_forgotten_album.jpg) | ![](examples/02_flooded_archive.jpg) | ![](examples/03_scorched.jpg) |
+| ![](docs/examples/00_original.jpg) | ![](docs/examples/01_forgotten_album.jpg) | ![](docs/examples/02_flooded_archive.jpg) | ![](docs/examples/03_scorched.jpg) |
 
 | shredder: strips | shredder: confetti | digital kill | disintegration |
 |---|---|---|---|
-| ![](examples/04_shredder_strip.jpg) | ![](examples/05_shredder_confetti.jpg) | ![](examples/06_digital_kill.jpg) | ![](examples/07_disintegration.jpg) |
+| ![](docs/examples/04_shredder_strip.jpg) | ![](docs/examples/05_shredder_confetti.jpg) | ![](docs/examples/06_digital_kill.jpg) | ![](docs/examples/07_disintegration.jpg) |
 
 *(sample photo: NASA astronaut portrait, public domain, via scikit-image)*
 
