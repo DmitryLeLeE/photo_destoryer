@@ -11,11 +11,13 @@
     'background:#cfc9b6;color:#0d0d0d;font-family:"Arial Black",Impact,sans-serif'
   ];
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let word = null;
   'PHOTO DESTROYER'.split('').forEach((ch) => {
-    if (ch === ' ') { const g = document.createElement('span'); g.className = 'gap'; title.appendChild(g); return; }
+    if (ch === ' ') { const g = document.createElement('span'); g.className = 'gap'; title.appendChild(g); word = null; return; }
+    if (!word) { word = document.createElement('span'); word.className = 'word'; title.appendChild(word); }
     const i = document.createElement('i'); i.textContent = ch;
     i.style.cssText = styles[Math.floor(rnd() * styles.length)] + ';transform:rotate(' + ((rnd() - 0.5) * 9).toFixed(1) + 'deg) translateY(' + Math.round((rnd() - 0.5) * 10) + 'px);font-size:' + (0.82 + rnd() * 0.32).toFixed(2) + 'em';
-    title.appendChild(i);
+    word.appendChild(i);
   });
   const go = (preset) => {
     const b = document.querySelector('#modes button[data-preset="' + preset + '"]');

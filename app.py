@@ -14,7 +14,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from destroyer import render, load_image, PARAMS, PRESETS, TINTS, BACKDROPS, CUTS, blank
+from destroyer import render, load_image, PARAMS, PRESETS, PRESET_GROUPS, TINTS, BACKDROPS, CUTS, blank, __version__
 from destroyer.stages import export_stages
 
 APP = "PHOTO DESTROYER"
@@ -34,7 +34,10 @@ PREVIEW_SIDE = 900
 EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
 MODES = [("AGING", "Forgotten album", "TIME"),
          ("SHREDDER", "Shredder: strip cut", "SHREDDER"),
-         ("DIGITAL KILL", "Digital kill", "DIGITAL KILL")]
+         ("DIGITAL KILL", "Digital kill", "DIGITAL KILL"),
+         ("SHATTER", "Broken glass", "SHATTER"),
+         ("FIRE", "Burning photo", "FIRE"),
+         ("OBLITERATE", "Obliterate", "FIRE")]
 EXPORT_SIZES = {"1600 px": 1600, "2400 px": 2400, "3600 px": 3600, "Original": None}
 
 
@@ -51,7 +54,7 @@ def checker(w, h, a=(52, 52, 52), b=(40, 40, 40), s=14):
 class App:
     def __init__(self, root, path=None):
         self.root = root
-        root.title(APP)
+        root.title("%s  v%s" % (APP, __version__))
         root.configure(bg=BG)
         try:
             if sys.platform.startswith("win"):
@@ -205,11 +208,13 @@ class App:
         self._label(head, "MODE").pack(anchor="w")
         mrow = tk.Frame(head, bg=PANEL)
         mrow.pack(fill="x", pady=(2, 8))
-        for i, (title, preset, group) in enumerate(MODES):
-            self._btn(mrow, title, lambda p=preset, g=group: self.set_mode(p, g)).pack(
-                side="left", fill="x", expand=True, padx=(0 if i == 0 else 3, 0))
+        for i, (title, preset, group) in enumerate(MODES):      # 3 x 2 grid: six modes
+            self._btn(mrow, title, lambda p=preset, g=group: self.set_mode(p, g)).grid(
+                row=i // 3, column=i % 3, sticky="ew", padx=(0 if i % 3 == 0 else 3, 0), pady=(0 if i < 3 else 3, 0))
+        for c in range(3):
+            mrow.columnconfigure(c, weight=1, uniform="modes")
         self._label(head, "PRESET").pack(anchor="w")
-        cb = ttk.Combobox(head, textvariable=self.preset, values=list(PRESETS), state="readonly", font=FONT)
+        cb = ttk.Combobox(head, textvariable=self.preset, values=[n for g in PRESET_GROUPS.values() for n in g], state="readonly", font=FONT)
         cb.pack(fill="x", pady=(2, 8))
         cb.bind("<<ComboboxSelected>>", lambda e: self.apply_preset(self.preset.get()))
 
@@ -339,8 +344,7 @@ class App:
         r.bind("<KeyRelease-space>", self._orig_off)
         r.bind("<KeyPress-r>", lambda e: self.reroll() if not isinstance(e.widget, ttk.Combobox) else None)
         r.bind("<KeyPress-g>", lambda e: self.randomize() if not isinstance(e.widget, ttk.Combobox) else None)
-        for i, (preset, group) in enumerate((("Forgotten album", "TIME"), ("Shredder: strip cut", "SHREDDER"),
-                                              ("Digital kill", "DIGITAL KILL")), 1):
+        for i, (_t, preset, group) in enumerate(MODES, 1):
             r.bind("<KeyPress-%d>" % i, lambda e, p=preset, g=group:
                    self.set_mode(p, g) if not isinstance(e.widget, ttk.Combobox) else None)
 
@@ -384,13 +388,14 @@ class App:
         for v in self.vars.values():
             v.set(0)
         keys = list(self.vars)
-        for k in random.sample([k for k in keys if k not in ("shred_w", "shred_chaos")], random.randint(6, 11)):
+        for k in random.sample([k for k in keys if k not in ("shred_w", "shred_chaos", "shard_size")], random.randint(6, 11)):
             self.vars[k].set(random.randint(25, 95))
         self.tint.set(random.choice([t for t, _ in TINTS]))
         self.backdrop.set(random.choice(["dark", "paper", "none"]))
         self.cut.set(random.choice(["strip", "cross"]))
         self.vars["shred_w"].set(random.randint(20, 60))
         self.vars["shred_chaos"].set(random.randint(20, 80))
+        self.vars["shard_size"].set(random.randint(20, 70))
         self.seed.set(random.randint(1, 99999))
         self._loading = False
         self._sync_combos()

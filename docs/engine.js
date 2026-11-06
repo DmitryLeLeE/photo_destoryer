@@ -8,7 +8,7 @@
   const TINT_BLACK = { amber: [0.9, 0.6, 0.25], red: [1.0, 0.4, 0.3], cyan: [0.2, 0.6, 0.7], mono: [0.5, 0.55, 0.65], none: [0.5, 0.5, 0.5] };
   const PAPER = [0.93, 0.89, 0.79];
   const NAMES = ['border', 'water', 'fade', 'mirror', 'stain', 'crack', 'peel', 'crease', 'dust', 'grain', 'burn', 'tear', 'corner',
-    'tape', 'glitch', 'chroma', 'scan', 'ghost', 'bloom', 'rot', 'label', 'bg', 'tilt', 'sort', 'melt', 'corrupt', 'redact', 'dissolve', 'shred', 'relief', 'fademap'];
+    'tape', 'glitch', 'chroma', 'scan', 'ghost', 'bloom', 'rot', 'label', 'bg', 'tilt', 'sort', 'melt', 'corrupt', 'redact', 'dissolve', 'shred', 'relief', 'fademap', 'mosh', 'jpeg', 'dead', 'shatter', 'fire'];
   const K = {}; NAMES.forEach((n, i) => { K[n] = i; });
   const PI = Math.PI;
 
@@ -675,6 +675,145 @@
     for (let i = 0; i < b.length; i++) out[i] = b[i] / 255;
     return out;
   }
+  const DEAD = [[0, 0, 0], [1, 1, 1], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1], [1, 0, 1]];
+  function fillRect(a, w, h, x0, y0, x1, y1, c) {
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(w, x1); y1 = Math.min(h, y1);
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * w + x) * 3; a[i] = c[0]; a[i + 1] = c[1]; a[i + 2] = c[2]; }
+  }
+  function fxMosh(img, a, E) {
+    // datamosh: macroblocks keep old motion vectors and drift; a held column is dragged across a band
+    const rng = E.rng('mosh'), { h, w, u } = E, out = new Float32Array(img), bs = Math.max(8, Math.round(u * rng.pick([18, 24, 32, 48])));
+    for (let k = 0, N = Math.floor(3 + 40 * a); k < N; k++) {
+      const bw = bs * rng.int(1, 5), bh = bs * rng.int(1, 3);
+      if (bw >= w || bh >= h) continue;
+      const x = rng.int(0, w - bw), y = rng.int(0, h - bh), dx = Math.round(rng.normal(0, bs * 3 * (0.5 + a))), dy = Math.round(rng.normal(0, bs * 1.2 * (0.5 + a)));
+      const sx = Math.min(Math.max(0, x + dx), w - bw), sy = Math.min(Math.max(0, y + dy), h - bh);
+      for (let yy = 0; yy < bh; yy++) { const d = ((y + yy) * w + x) * 3, s = ((sy + yy) * w + sx) * 3; for (let i = 0; i < bw * 3; i++) out[d + i] = img[s + i]; }
+    }
+    for (let k = 0, S = Math.floor(1 + 10 * a); k < S; k++) {
+      const y = rng.int(0, h), bh = Math.min(h - y, Math.max(4, Math.floor(rng.uniform(4, 40) * u))), x = rng.int(0, Math.floor(w * 0.9)), ln = Math.min(w - x, Math.floor(rng.uniform(0.08, 0.5) * w * (0.4 + a)));
+      for (let yy = y; yy < y + bh; yy++) { const b = (yy * w + x) * 3; for (let xx = 1; xx < ln; xx++) { const d = b + xx * 3; out[d] = out[b]; out[d + 1] = out[b + 1]; out[d + 2] = out[b + 2]; } }
+    }
+    return out;
+  }
+  function fxJpeg(img, a, E) {
+    // JPEG death: chroma subsampling, blocky luma, banding, tiles with a wrong DC value
+    const rng = E.rng('jpeg'), { h, w, u } = E, n = h * w, B = Math.max(4, Math.round(11 * u)), F = B * 2, out = new Float32Array(img.length), Y = lumaMap(img, n);
+    const nbx = Math.ceil(w / B), nby = Math.ceil(h / B), fx = Math.ceil(w / F), fy = Math.ceil(h / F), bad = new Float32Array(nbx * nby * 4), pb = 0.004 + 0.03 * a;
+    for (let i = 0; i < nbx * nby; i++) if (rng.random() < pb) { bad[i * 4] = rng.normal(0, 0.18); for (let c = 0; c < 3; c++) bad[i * 4 + 1 + c] = rng.normal(0, 0.12); }
+    const Yb = new Float32Array(nbx * nby), Cm = new Float32Array(fx * fy * 3);
+    for (let by = 0; by < nby; by++) for (let bx = 0; bx < nbx; bx++) {
+      let s = 0, c = 0; for (let y = by * B; y < Math.min(h, by * B + B); y++) for (let x = bx * B; x < Math.min(w, bx * B + B); x++) { s += Y[y * w + x]; c++; }
+      Yb[by * nbx + bx] = s / c;
+    }
+    for (let by = 0; by < fy; by++) for (let bx = 0; bx < fx; bx++) {
+      const m = [0, 0, 0]; let c = 0;
+      for (let y = by * F; y < Math.min(h, by * F + F); y++) for (let x = bx * F; x < Math.min(w, bx * F + F); x++) { const i = y * w + x; for (let k = 0; k < 3; k++) m[k] += img[i * 3 + k] - Y[i]; c++; }
+      for (let k = 0; k < 3; k++) Cm[(by * fx + bx) * 3 + k] = m[k] / c;
+    }
+    const kc = Math.min(1, 1.5 * a), q = 40 - 32 * a;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, bi = Math.floor(y / B) * nbx + Math.floor(x / B), fi = Math.floor(y / F) * fx + Math.floor(x / F);
+      let yv = Y[i] + (Yb[bi] - Y[i]) * 0.8 * a + bad[bi * 4];
+      yv += (Math.round(yv * q) / q - yv) * a;
+      for (let c = 0; c < 3; c++) { let cv = img[i * 3 + c] - Y[i]; cv += (Cm[fi * 3 + c] - cv) * kc + bad[bi * 4 + 1 + c]; out[i * 3 + c] = clamp01(yv + cv); }
+    }
+    return out;
+  }
+  function fxDead(img, a, E) {
+    // dead hardware: stuck columns / rows, dead blocks, hot pixels
+    const rng = E.rng('dead'), { h, w, u } = E, col = () => DEAD[rng.int(0, 7)];
+    for (let k = 0, N = Math.floor(1 + 9 * a); k < N; k++) {
+      const x = rng.int(0, w), lw = Math.max(1, Math.round(u * rng.uniform(0.8, 2.2))), y0 = Math.floor(rng.uniform(0, 0.7) * h);
+      const y1 = rng.random() < 0.5 ? h : Math.min(h, Math.floor(y0 + rng.uniform(0.15, 0.6) * h));
+      fillRect(img, w, h, x, y0, x + lw, y1, col());
+    }
+    for (let k = 0, N = Math.floor(a * 3.5); k < N; k++) {
+      const y = rng.int(0, h), lh = Math.max(1, Math.round(u * rng.uniform(0.8, 2))), x0 = Math.floor(rng.uniform(0, 0.6) * w), x1 = Math.min(w, Math.floor(x0 + rng.uniform(0.2, 0.6) * w));
+      fillRect(img, w, h, x0, y, x1, y + lh, col());
+    }
+    for (let k = 0, N = Math.floor(1 + 7 * a); k < N; k++) {
+      const bw = Math.floor(u * rng.uniform(8, 48)), bh = Math.floor(u * rng.uniform(8, 34)), x = rng.int(0, Math.max(1, w - bw)), y = rng.int(0, Math.max(1, h - bh));
+      fillRect(img, w, h, x, y, x + bw, y + bh, col());
+    }
+    const ds = Math.max(1, Math.round(u * 1.3));
+    for (let k = 0, N = Math.floor(a * 0.0012 * h * w); k < N; k++) { const x = rng.int(0, Math.max(1, w - ds)), y = rng.int(0, Math.max(1, h - ds)); fillRect(img, w, h, x, y, x + ds, y + ds, col()); }
+    return img;
+  }
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => v / 16 - 0.5 + 1 / 32);
+  function fxCrush(img, a, E) {
+    // bit crush: the palette collapses to a few levels per channel, ordered-dithered
+    const { h, w, u } = E, L = Math.max(2, Math.round(2 + Math.pow(1 - a, 2) * 30)), c = Math.max(1, Math.round(1.3 * u));
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const d = BAYER[(Math.floor(y / c) % 4) * 4 + (Math.floor(x / c) % 4)] * 0.95, i = (y * w + x) * 3;
+      for (let k = 0; k < 3; k++) img[i + k] = clamp01(Math.floor(img[i + k] * (L - 1) + 0.5 + d) / (L - 1));
+    }
+    return img;
+  }
+  function fxShatter(img, p, E) {
+    // broken glass: Voronoi shards densest around an impact point; each slips and tilts, some fall out, dark seams + glint
+    const a = p.shatter, rng = E.rng('shatter'), { h, w, u } = E, n = h * w, diag = Math.hypot(w, h);
+    const cell = u * (60 + 320 * p.shard_size), cx = rng.uniform(0.3, 0.7) * w, cy = rng.uniform(0.25, 0.7) * h, n0 = Math.max(12, Math.min(110, Math.floor(0.9 * n / (cell * cell))));
+    const sx = [], sy = [];
+    for (let i = 0; i < n0; i++) { const ang = rng.uniform(0, 2 * PI), rad = diag * 0.75 * Math.pow(rng.random(), 1.7); sx.push(Math.min(1.05 * w, Math.max(-0.05 * w, cx + rad * Math.cos(ang)))); sy.push(Math.min(1.05 * h, Math.max(-0.05 * h, cy + rad * Math.sin(ang)))); }
+    [[0, 0], [w, 0], [0, h], [w, h], [w / 2, 0], [w / 2, h], [0, h / 2], [w, h / 2]].forEach((c) => { sx.push(c[0]); sy.push(c[1]); });
+    const N = sx.length, s = 2, hh = Math.ceil(h / s), ww = Math.ceil(w / s), wx = fbm(rng, hh, ww, u * 40 / s, 3), wy = fbm(rng, hh, ww, u * 40 / s, 3), lab = new Int16Array(hh * ww);
+    for (let y = 0; y < hh; y++) for (let x = 0; x < ww; x++) {
+      const i = y * ww + x, X = x * s + (wx[i] - 0.5) * u * 30, Y = y * s + (wy[i] - 0.5) * u * 30; let best = 1e18, bi = 0;
+      for (let k = 0; k < N; k++) { const dx = X - sx[k], dy = Y - sy[k], d = dx * dx + dy * dy; if (d < best) { best = d; bi = k; } }
+      lab[i] = bi;
+    }
+    const dist = sx.map((x, i) => Math.hypot(x - cx, sy[i] - cy) / diag), th = [], tx = [], ty = [], tone = [], hole = [];
+    for (let i = 0; i < N; i++) { const sp = 0.35 + 1.6 * dist[i]; th.push(rng.normal(0, 0.04 * a) * sp); tx.push(rng.normal(0, 8 * u * a) * sp); ty.push(rng.normal(0, 8 * u * a) * sp + 5 * u * a * dist[i]); tone.push(1 + rng.normal(0, 0.06 * a)); hole.push(rng.random() < 0.55 * p.shard_gap * (0.4 + dist[i])); }
+    const L = new Int16Array(n), out = new Float32Array(n * 3);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, l = lab[Math.min(hh - 1, y >> 1) * ww + Math.min(ww - 1, x >> 1)]; L[i] = l;
+      if (hole[l]) { out[i * 3] = out[i * 3 + 1] = out[i * 3 + 2] = 0.03; continue; }
+      const dx = x - sx[l] - tx[l], dy = y - sy[l] - ty[l], c = Math.cos(th[l]), sn = Math.sin(th[l]);
+      sample(img, w, h, 3, sx[l] + c * dx + sn * dy, sy[l] - sn * dx + c * dy, out, i * 3);
+      out[i * 3] *= tone[l]; out[i * 3 + 1] *= tone[l]; out[i * 3 + 2] *= tone[l];
+    }
+    const b = new Float32Array(n);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; let v = 0; if (x < w - 1 && L[i] !== L[i + 1]) v++; if (y < h - 1 && L[i] !== L[i + w]) v++; b[i] = v > 1 ? 1 : v; }
+    const line = gauss(b, w, h, 1, Math.max(0.8, 0.9 * u)), k = Math.max(2, Math.floor(u * 1.5)), op = 0.3 + 0.7 * a;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, ln = clamp01(line[i] * 3), gi = ((y - k + h) % h) * w + ((x - k + w) % w), gl = clamp01(line[gi] * 3);
+      for (let c = 0; c < 3; c++) out[i * 3 + c] = clamp01(out[i * 3 + c] * (1 - 0.88 * ln * op) + 0.40 * gl * (1 - ln) * op);
+    }
+    return out;
+  }
+  function fxFire(img, p, E) {
+    // a burn front eats the print from the edges: scorch ahead, ember line along it, ash behind it
+    const a = p.fire, em = p.ember, so = p.soot, rng = E.rng('fire'), { h, w, u } = E, n = h * w, diag = Math.hypot(w, h);
+    const D = new Float32Array(n).fill(9), k0 = 1 + rng.int(0, 3);
+    for (let q = 0; q < k0; q++) {
+      const side = rng.int(0, 4), t = rng.uniform(0.1, 0.9), px = [t * w, w, t * w, 0][side], py = [0, t * h, h, t * h][side];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const d = Math.hypot(x - px, y - py) / diag, i = y * w + x; if (d < D[i]) D[i] = d; }
+    }
+    const big = fbm(rng, h, w, u * 140, 4), fine = noise2d(rng, h, w, u * 9), smoke = fbm(rng, h, w, u * 90, 3), cloud = fbm(rng, h, w, u * 60, 3), flake = noise2d(rng, h, w, u * 4), flick = noise2d(rng, h, w, u * 5), spk = noise2d(rng, h, w, u * 2.6);
+    const T = 0.02 + 0.5 * a + 0.55 * a * a * a, S = new Float32Array(n), G = new Float32Array(n), burntA = new Float32Array(n), out = new Float32Array(img);
+    for (let i = 0; i < n; i++) {
+      const s = T - (D[i] + 0.38 * (big[i] - 0.5) + 0.06 * (fine[i] - 0.5)); S[i] = s;
+      const burnt = sstep(-0.004, 0.006, s); burntA[i] = burnt;
+      const sc = sstep(-0.14, 0, s) * (1 - burnt), k = 0.35 + 0.65 * so, sm = sstep(-0.5, 0, s) * (0.5 + smoke[i]) * (1 - burnt);
+      const dark = (1 - sc * k * 0.6) * (1 - 0.5 * so * sm), m = [1, 1 - sc * k * 0.18, 1 - sc * k * 0.45];
+      const ash = 0.035 + (0.05 + 0.22 * cloud[i]) * sstep(0.03, 0.45, s) * (0.4 + flake[i]), ghost = 0.22 * (1 - sstep(0, 0.2, s)) * 0.55;
+      for (let c = 0; c < 3; c++) { const v = img[i * 3 + c] * dark * m[c]; out[i * 3 + c] = v * (1 - burnt) + (ash + ghost * img[i * 3 + c]) * burnt; }
+      const band = Math.exp(-Math.max(s, 0) / (0.014 + 0.016 * em)) * burnt;
+      G[i] = clamp01(band * clamp01(0.55 + 1.8 * (flick[i] - 0.5)) * (0.2 + 1.2 * em));
+    }
+    const glow = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const g = G[i], core = g * g, sp = sstep(0.9, 0.99, spk[i]) * burntA[i] * (0.25 + 0.75 * sstep(0, 0.5, S[i])) * em;
+      const er = 1, eg = 0.22 + 0.62 * core, eb = 0.03 + 0.28 * core;
+      out[i * 3] = out[i * 3] * (1 - g) + er * g; out[i * 3 + 1] = out[i * 3 + 1] * (1 - g) + eg * g; out[i * 3 + 2] = out[i * 3 + 2] * (1 - g) + eb * g;
+      out[i * 3] = out[i * 3] * (1 - sp) + sp; out[i * 3 + 1] = out[i * 3 + 1] * (1 - sp) + 0.55 * sp; out[i * 3 + 2] = out[i * 3 + 2] * (1 - sp) + 0.12 * sp;
+      glow[i] = g + sp * 0.6;
+    }
+    const halo = gauss(glow, w, h, 1, 7 * u), hk = [1, 0.42, 0.1];
+    for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) out[i * 3 + c] = clamp01(out[i * 3 + c] + halo[i] * hk[c] * 0.55 * em);
+    return out;
+  }
   function fxRedact(img, a, E) {
     const rng = E.rng('redact'), { h, w, u } = E, bars = Math.floor(2 + 14 * a);
     for (let k = 0; k < bars; k++) {
@@ -876,7 +1015,7 @@
   // ───────────── main ─────────────
   function normalize(params, master) {
     const p = {}, keys = root.PD_DATA.keys;
-    for (const k of keys) { const m = (k === 'shred_w' || k === 'shred_chaos') ? 100 : master; p[k] = Math.min(100, Math.max(0, (Number(params[k]) || 0) * m / 100)) / 100; }
+    for (const k of keys) { const m = (k === 'shred_w' || k === 'shred_chaos' || k === 'shard_size') ? 100 : master; p[k] = Math.min(100, Math.max(0, (Number(params[k]) || 0) * m / 100)) / 100; }
     p.cut = params.cut === 'cross' ? 'cross' : 'strip';
     p.tint = TINT_GAIN[params.tint] ? params.tint : 'amber';
     p.backdrop = ['none', 'dark', 'paper'].includes(params.backdrop) ? params.backdrop : 'none';
@@ -890,8 +1029,10 @@
     const u0 = Math.min(h, w) / 1000;
     if (p.border > 0) ({ img, w, h } = fxBorder(img, w, h, p.border, u0, seed));
     const E = new Ctx(h, w, u0, seed), n = h * w, paper = agedPaper(tint, p.fade);
-    const dig = [['sort', fxSort], ['melt', fxMelt], ['corrupt', fxCorrupt], ['glitch', fxGlitch], ['chroma', fxChroma], ['scan', fxScan], ['rot', fxRot], ['redact', fxRedact], ['ghost', fxGhost], ['bloom', fxBloom]];
+    const dig = [['sort', fxSort], ['melt', fxMelt], ['mosh', fxMosh], ['corrupt', fxCorrupt], ['jpeg', fxJpeg], ['glitch', fxGlitch], ['chroma', fxChroma], ['scan', fxScan], ['rot', fxRot], ['crush', fxCrush], ['redact', fxRedact], ['dead', fxDead], ['ghost', fxGhost], ['bloom', fxBloom]];
+    if (p.shatter > 0) img = fxShatter(img, p, E);
     for (const [name, fn] of dig) if (p[name] > 0) img = fn(img, p[name], E);
+    if (p.fire > 0) img = fxFire(img, p, E);
     if (p.water > 0) img = fxWaterWarp(img, p.water, E);
     if (p.fade > 0 || tint !== 'none') img = fxFade(img, E, p.fade, tint);
     if (p.mirror > 0) img = fxMirror(img, p.mirror, E);

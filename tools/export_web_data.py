@@ -2,7 +2,8 @@
 """Generate docs/data.js (params + presets) from destroyer/params.py so web and desktop never drift."""
 import json, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from destroyer.params import PARAMS, PRESETS, TINTS, BACKDROPS, CUTS, KEYS
+from destroyer.params import PARAMS, PRESETS, PRESET_GROUPS, TINTS, BACKDROPS, CUTS, KEYS
+from destroyer import __version__
 
 data = {
     "keys": KEYS,
@@ -11,6 +12,8 @@ data = {
     "backdrops": [{"key": k, "label": l} for k, l in BACKDROPS],
     "cuts": [{"key": k, "label": l} for k, l in CUTS],
     "presets": PRESETS,
+    "groups": PRESET_GROUPS,
+    "version": __version__,
 }
 out = os.path.join(os.path.dirname(__file__), "..", "docs", "data.js")
 with open(out, "w", encoding="utf-8") as f:

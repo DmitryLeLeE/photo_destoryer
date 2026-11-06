@@ -1,29 +1,22 @@
-# PHOTO DESTROYER 1.0
+# PHOTO DESTROYER 1.1: digital destruction
 
-Turn any photo into an old, broken, shredded or digitally destroyed one, and make the ruin look like art.
+Big update: **three new modes** (SHATTER, FIRE, OBLITERATE), a much stronger **digital kill**, a much nicer interface and a layout that works on phones, tablets and big screens.
 
 **Try it in the browser, nothing is uploaded:** https://dmitrylelee.github.io/photo_destoryer/
 
-## What's inside
+## New
 
-- **AGING**: uneven dye fade, grain, water rings, mould and foxing, silvering, creases with white cracks, craquelure, peeling emulsion, dust, torn edges, ripped corners, burns, tape, borders, a table underneath.
-- **SHREDDER**: the print is half way through a paper shredder. Strip cut or confetti, fanned and twisted strips, cut-off ends piling up below.
-- **DIGITAL KILL**: pixel sorting, melting pixels, flipped bytes, disintegration into particles, redaction bars, secure erase. Plus the **WIRED** group (glitch, channel split, VHS scan, ghost layer, bloom, digital rot, system labels) for the lain-style "signal is dying" look.
-- **Decay stages**: export the same photo at N steps of destruction as PNG frames, a GIF and a contact strip.
-- 14 presets, a seed for every ruin (same photo + same seed = same destruction), a *Total decay* master slider.
+- **3 new modes**: **SHATTER** (broken glass), **FIRE** (burn front, embers, ash) and **OBLITERATE** (8 hard presets that stack everything until only the destroyed copy is left: Obliterate, Ground zero, Ashes, Nothing left, Evidence destroyed, Shattered and burned, Dead file, Memory hole).
+- **4 new digital effects**: Datamosh, JPEG death, Dead pixels, Bit crush.
+- **50 presets in total**. Digital: Datamosh, JPEG death, Dead sector, Bit rot, Signal lost, Pixel storm, Server fire, Deep fried, Redacted file, Ghost in the wire, CRT death, Memory leak, Format C:. Aging: Sun-bleached, Attic mold, Photocopy of a photocopy, Polaroid left in a car. Shredder: fine strips, jam, classified.
+- **Web**: live-thumbnail preset filmstrip, a colour theme per mode, collapsible slider groups, undo/redo, PNG/JPEG/WebP export, shareable settings link, `[` `]` to flip through presets.
+- **Phones and tablets**: the preview stays pinned while you drag sliders, big touch targets, landscape layout. Checked on 9 emulated screens from 320 px phones to 2560 px desktops.
+- **Desktop**: new sliders and presets, hold the picture to compare, double-click a slider to reset, `G` randomize, `1-3` mode.
 
 ## Downloads
 
-- **PhotoDestroyer-windows.zip**: portable Windows build (unzip, run `PhotoDestroyer.exe`). Attached by GitHub Actions a few minutes after this release appears.
-- **Web**: no download, open the link above.
-- **Python / command line**: `pip install -r requirements.txt`, then `python app.py` or `python cli.py photo.jpg -p "Forgotten album"`.
+- **PhotoDestroyer-windows.zip**: portable Windows build, unzip and run `PhotoDestroyer.exe` (not code-signed, so SmartScreen may ask for "More info" > "Run anyway").
+- **Web**: open the link above.
+- **Python / CLI**: `pip install -r requirements.txt`, then `python app.py` or `python cli.py photo.jpg -p "Datamosh"`.
 
-## Controls
-
-Hold **SPACE** (or press and hold the picture) to see the original. **R** new seed, **G / Randomize**, **1 / 2 / 3** switch mode, double-click a slider to reset it. The web version can copy a link with your exact settings.
-
-## Notes
-
-- Everything runs locally on pure numpy + Pillow, no OpenCV or scipy.
-- The Windows build is not code-signed, so SmartScreen may warn on first launch ("More info" > "Run anyway").
-- Sample photo: NASA astronaut portrait, public domain.
+Full list of changes: [CHANGELOG.md](CHANGELOG.md).

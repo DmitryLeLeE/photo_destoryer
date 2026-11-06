@@ -30,7 +30,7 @@ K = {n: i for i, n in enumerate(
     ["border", "water", "fade", "mirror", "stain", "crack", "peel", "crease",
      "dust", "grain", "burn", "tear", "corner", "tape", "glitch", "chroma",
      "scan", "ghost", "bloom", "rot", "label", "bg", "tilt",
-     "sort", "melt", "corrupt", "redact", "dissolve", "shred", "relief", "fademap"])}
+     "sort", "melt", "corrupt", "redact", "dissolve", "shred", "relief", "fademap", "mosh", "jpeg", "dead", "shatter", "fire"])}
 
 TINT_GAIN = {
     "amber": (1.00, 0.88, 0.58),
@@ -791,6 +791,189 @@ def fx_corrupt(img, a, E):
     return clamp01(b.astype(F32) / 255.0)
 
 
+_DEAD_COLORS = ((0, 0, 0), (1, 1, 1), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1), (1, 0, 1))
+
+
+def fx_mosh(img, a, E):
+    """Datamosh: macroblocks keep their old motion vectors and drift, and the last good
+    column of a band is held and dragged across the frame like a broken video stream."""
+    rng = E.rng("mosh")
+    h, w, u = E.h, E.w, E.u
+    out = img.copy()
+    bs = max(8, int(round(u * (18, 24, 32, 48)[int(rng.integers(0, 4))])))
+    for _ in range(int(3 + 40 * a)):
+        bw, bh = bs * int(rng.integers(1, 5)), bs * int(rng.integers(1, 3))
+        if bw >= w or bh >= h:
+            continue
+        x, y = int(rng.integers(0, w - bw)), int(rng.integers(0, h - bh))
+        dx = int(round(rng.normal(0, bs * 3 * (0.5 + a))))
+        dy = int(round(rng.normal(0, bs * 1.2 * (0.5 + a))))
+        sx, sy = min(max(0, x + dx), w - bw), min(max(0, y + dy), h - bh)
+        out[y:y + bh, x:x + bw] = img[sy:sy + bh, sx:sx + bw]
+    for _ in range(int(1 + 10 * a)):
+        y = int(rng.integers(0, h))
+        bh = min(h - y, max(4, int(rng.uniform(4, 40) * u)))
+        x = int(rng.integers(0, int(w * 0.9)))
+        ln = min(w - x, int(rng.uniform(0.08, 0.5) * w * (0.4 + a)))
+        out[y:y + bh, x:x + ln] = out[y:y + bh, x:x + 1]
+    return out
+
+
+def fx_jpeg(img, a, E):
+    """JPEG death: chroma subsampling, blocky luma, banding and a few tiles with a wrong DC value."""
+    rng = E.rng("jpeg")
+    h, w, u = E.h, E.w, E.u
+    B = max(4, int(round(11 * u)))
+    F = B * 2
+    hp, wp = -(-h // F) * F, -(-w // F) * F
+    pad = np.pad(img, ((0, hp - h), (0, wp - w), (0, 0)), mode="edge")
+    Y = luma(pad)[..., None]
+    C = pad - Y
+    Cm = C.reshape(hp // F, F, wp // F, F, 3).mean(axis=(1, 3))
+    C = C + (np.repeat(np.repeat(Cm, F, 0), F, 1) - C) * min(1.0, 1.5 * a)
+    Yb = Y.reshape(hp // B, B, wp // B, B, 1).mean(axis=(1, 3))
+    Y = Y + (np.repeat(np.repeat(Yb, B, 0), B, 1) - Y) * (0.8 * a)
+    bad = rng.random((hp // B, wp // B, 1)) < (0.004 + 0.03 * a)
+    dY = np.where(bad, rng.normal(0, 0.18, (hp // B, wp // B, 1)), 0).astype(F32)
+    dC = np.where(bad, rng.normal(0, 0.12, (hp // B, wp // B, 3)), 0).astype(F32)
+    Y = Y + np.repeat(np.repeat(dY, B, 0), B, 1)
+    C = C + np.repeat(np.repeat(dC, B, 0), B, 1)
+    q = 40 - 32 * a
+    Y = Y + (np.round(Y * q) / q - Y) * a
+    return clamp01((Y + C)[:h, :w]).astype(F32)
+
+
+def fx_dead(img, a, E):
+    """Dead hardware: stuck columns and rows, dead blocks, hot pixels."""
+    rng = E.rng("dead")
+    h, w, u = E.h, E.w, E.u
+    out = img.copy()
+    col = lambda: _DEAD_COLORS[int(rng.integers(0, 7))]
+    for _ in range(int(1 + 9 * a)):
+        x, lw = int(rng.integers(0, w)), max(1, int(round(u * rng.uniform(0.8, 2.2))))
+        y0 = int(rng.uniform(0, 0.7) * h)
+        y1 = h if rng.random() < 0.5 else min(h, int(y0 + rng.uniform(0.15, 0.6) * h))
+        out[y0:y1, x:x + lw] = col()
+    for _ in range(int(a * 3.5)):
+        y, lh = int(rng.integers(0, h)), max(1, int(round(u * rng.uniform(0.8, 2))))
+        x0 = int(rng.uniform(0, 0.6) * w)
+        x1 = min(w, int(x0 + rng.uniform(0.2, 0.6) * w))
+        out[y:y + lh, x0:x1] = col()
+    for _ in range(int(1 + 7 * a)):
+        bw, bh = int(u * rng.uniform(8, 48)), int(u * rng.uniform(8, 34))
+        x, y = int(rng.integers(0, max(1, w - bw))), int(rng.integers(0, max(1, h - bh)))
+        out[y:y + bh, x:x + bw] = col()
+    ds = max(1, int(round(u * 1.3)))
+    for _ in range(int(a * 0.0012 * h * w)):
+        x, y = int(rng.integers(0, max(1, w - ds))), int(rng.integers(0, max(1, h - ds)))
+        out[y:y + ds, x:x + ds] = col()
+    return out
+
+
+_BAYER = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]], F32) / 16.0 - 0.5 + 1 / 32.0
+
+
+def fx_crush(img, a, E):
+    """Bit crush: the palette collapses to a few levels per channel, ordered-dithered."""
+    h, w, u = E.h, E.w, E.u
+    L = max(2, int(round(2 + (1 - a) ** 2 * 30)))
+    c = max(1, int(round(1.3 * u)))
+    d = _BAYER[((np.arange(h) // c) % 4)[:, None], ((np.arange(w) // c) % 4)[None, :]][..., None]
+    return clamp01(np.floor(img * (L - 1) + 0.5 + d * 0.95) / (L - 1)).astype(F32)
+
+
+def fx_shatter(img, p, E):
+    """Broken glass: a Voronoi shatter densest around an impact point. Every shard slips and
+    tilts a little, some fall out, dark cracks run along the seams with a thin glint."""
+    a = p["shatter"]
+    rng = E.rng("shatter")
+    h, w, u = E.h, E.w, E.u
+    diag = math.hypot(w, h)
+    cell = u * (60 + 320 * p["shard_size"])
+    cx, cy = rng.uniform(0.3, 0.7) * w, rng.uniform(0.25, 0.7) * h
+    n0 = int(np.clip(0.9 * h * w / (cell * cell), 12, 110))
+    ang, rad = rng.uniform(0, 2 * math.pi, n0), diag * 0.75 * rng.random(n0) ** 1.7
+    sx = np.clip(cx + rad * np.cos(ang), -0.05 * w, 1.05 * w)
+    sy = np.clip(cy + rad * np.sin(ang), -0.05 * h, 1.05 * h)
+    far = np.array([(0, 0), (w, 0), (0, h), (w, h), (w / 2, 0), (w / 2, h), (0, h / 2), (w, h / 2)], np.float64)
+    sx, sy = np.concatenate([sx, far[:, 0]]), np.concatenate([sy, far[:, 1]])
+    N = len(sx)
+    s = 2
+    hh, ww = -(-h // s), -(-w // s)
+    gx, gy = np.meshgrid(np.arange(ww, dtype=F32) * s, np.arange(hh, dtype=F32) * s)
+    gx = gx + (fbm(rng, hh, ww, u * 40 / s, 3) - 0.5) * u * 30           # seams wander
+    gy = gy + (fbm(rng, hh, ww, u * 40 / s, 3) - 0.5) * u * 30
+    best = np.full((hh, ww), 1e18, np.float64)
+    lab = np.zeros((hh, ww), np.int32)
+    for i in range(N):
+        d = (gx - sx[i]) ** 2 + (gy - sy[i]) ** 2
+        m = d < best
+        best[m] = d[m]
+        lab[m] = i
+    L = np.repeat(np.repeat(lab, s, 0), s, 1)[:h, :w]
+    dist = np.hypot(sx - cx, sy - cy) / diag
+    spread = 0.35 + 1.6 * dist
+    th = rng.normal(0, 0.04 * a, N) * spread
+    tx = rng.normal(0, 8 * u * a, N) * spread
+    ty = rng.normal(0, 8 * u * a, N) * spread + 5 * u * a * dist
+    tone = 1 + rng.normal(0, 0.06 * a, N)
+    hole = rng.random(N) < 0.55 * p["shard_gap"] * (0.4 + dist)
+    X, Y = E.xy
+    dx, dy = X - sx[L] - tx[L], Y - sy[L] - ty[L]
+    c, sn = np.cos(th)[L], np.sin(th)[L]
+    out = remap(img, sx[L] + c * dx + sn * dy, sy[L] - sn * dx + c * dy) * tone[L][..., None].astype(F32)
+    out[hole[L]] = 0.03
+    b = np.zeros((h, w), F32)
+    b[:, :-1] += L[:, :-1] != L[:, 1:]
+    b[:-1, :] += L[:-1, :] != L[1:, :]
+    line = clamp01(gauss(clamp01(b), max(0.8, 0.9 * u)) * 3.0)
+    k = max(2, int(u * 1.5))
+    glint = np.roll(line, (k, k), (0, 1))
+    out = out * (1 - 0.88 * line * (0.3 + 0.7 * a))[..., None]
+    out = out + (0.40 * glint * (1 - line) * (0.3 + 0.7 * a))[..., None]
+    return clamp01(out).astype(F32)
+
+
+def fx_fire(img, p, E):
+    """A burn front eats the print from the edges: scorched brown ahead of it, a glowing ember
+    line along it, grey ash behind it. 'fire' sets how far it has got, 'ember' the glow,
+    'soot' the browning and smoke."""
+    a, em, so = p["fire"], p["ember"], p["soot"]
+    rng = E.rng("fire")
+    h, w, u = E.h, E.w, E.u
+    X, Y = E.xy
+    diag = math.hypot(w, h)
+    D = np.full((h, w), 9.0, F32)
+    for _ in range(1 + int(rng.integers(0, 3))):
+        side, t = int(rng.integers(0, 4)), rng.uniform(0.1, 0.9)
+        px, py = ((t * w, 0), (w, t * h), (t * w, h), (0, t * h))[side]
+        D = np.minimum(D, (np.hypot(X - px, Y - py) / diag).astype(F32))
+    big = fbm(rng, h, w, u * 140, 4) - 0.5
+    fine = noise2d(rng, h, w, u * 9) - 0.5
+    s = (0.02 + 0.5 * a + 0.55 * a ** 3) - (D + 0.38 * big + 0.06 * fine)   # >0: burnt
+    burnt = smoothstep(-0.004, 0.006, s)
+    sc = smoothstep(-0.14, 0.0, s) * (1 - burnt)                         # scorch ahead of the front
+    k = 0.35 + 0.65 * so
+    img = img * (1 - sc * k * 0.6)[..., None] * (1 - (sc * k)[..., None] * np.array([0.0, 0.18, 0.45], F32)[None, None, :])
+    smoke = smoothstep(-0.5, 0.0, s) * (0.5 + fbm(rng, h, w, u * 90, 3)) * (1 - burnt)
+    img = img * (1 - 0.5 * so * smoke)[..., None]
+    flake = noise2d(rng, h, w, u * 4)
+    cloud = fbm(rng, h, w, u * 60, 3)
+    ash = 0.035 + (0.05 + 0.22 * cloud) * smoothstep(0.03, 0.45, s) * (0.4 + flake)
+    ghost = (0.22 * (1 - smoothstep(0.0, 0.2, s)))[..., None] * img * 0.55     # charred print still faintly visible at the front
+    img = img * (1 - burnt)[..., None] + (ash[..., None] + ghost) * burnt[..., None]
+    band = np.exp(-np.maximum(s, 0) / (0.014 + 0.016 * em)) * burnt
+    g = clamp01(band * clamp01(0.55 + 1.8 * (noise2d(rng, h, w, u * 5) - 0.5)) * (0.2 + 1.2 * em))
+    core = (g ** 2)[..., None]
+    ember = np.concatenate([np.ones_like(g)[..., None], 0.22 + 0.62 * core, 0.03 + 0.28 * core], -1)
+    img = img * (1 - g)[..., None] + ember * g[..., None]
+    spark = smoothstep(0.9, 0.99, noise2d(rng, h, w, u * 2.6)) * burnt * (0.25 + 0.75 * smoothstep(0.0, 0.5, s)) * em
+    img = img * (1 - spark)[..., None] + spark[..., None] * np.array([1.0, 0.55, 0.12], F32)
+    halo = gauss(g + spark * 0.6, 7 * u)
+    img = img + halo[..., None] * np.array([1.0, 0.42, 0.1], F32) * (0.55 * em)
+    return clamp01(img).astype(F32)
+
+
 def fx_redact(img, a, E):
     """Black redaction bars plus a secure-erase pass."""
     rng = E.rng("redact")
@@ -1142,7 +1325,7 @@ def compose(rgba, p, E_print, seed, tint):
 def normalize(params, master=100):
     p = {}
     for k in KEYS:
-        m = 100.0 if k in ("shred_w", "shred_chaos") else master   # shape params ignore the master slider
+        m = 100.0 if k in ("shred_w", "shred_chaos", "shard_size") else master   # shape params ignore the master slider
         v = float(params.get(k, 0) or 0) * m / 100.0
         p[k] = float(np.clip(v, 0, 100)) / 100.0
     p["tint"] = params.get("tint", "amber") if params.get("tint") in TINT_GAIN else "amber"
@@ -1172,12 +1355,19 @@ def render(src, params, seed=1, master=100, max_side=1100, progress=None):
     paper = aged_paper(tint, p["fade"])
 
     # digital faults are part of the frame content, so they come first
-    for name, fn in (("sort", fx_sort), ("melt", fx_melt), ("corrupt", fx_corrupt),
-                     ("glitch", fx_glitch), ("chroma", fx_chroma), ("scan", fx_scan),
-                     ("rot", fx_rot), ("redact", fx_redact), ("ghost", fx_ghost), ("bloom", fx_bloom)):
+    if p["shatter"] > 0:
+        step("shatter")
+        img = fx_shatter(img, p, E)
+    for name, fn in (("sort", fx_sort), ("melt", fx_melt), ("mosh", fx_mosh), ("corrupt", fx_corrupt),
+                     ("jpeg", fx_jpeg), ("glitch", fx_glitch), ("chroma", fx_chroma), ("scan", fx_scan),
+                     ("rot", fx_rot), ("crush", fx_crush), ("redact", fx_redact), ("dead", fx_dead),
+                     ("ghost", fx_ghost), ("bloom", fx_bloom)):
         if p[name] > 0:
             step(name)
             img = fn(img, p[name], E)
+    if p["fire"] > 0:
+        step("fire")
+        img = fx_fire(img, p, E)
 
     if p["water"] > 0:
         step("water")
